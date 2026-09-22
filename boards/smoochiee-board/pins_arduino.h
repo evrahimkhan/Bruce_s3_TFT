@@ -53,7 +53,7 @@ static const uint8_t SCK = 18;
 #define NRF24_SCK_PIN SPI_SCK_PIN
 #define NRF24_MISO_PIN SPI_MISO_PIN
 
-#define FP 1
+// FP comes from precompiler_flags.h; a variant-level FP macro collides with FastLED 3.10.
 #define FM 2
 #define FG 3
 

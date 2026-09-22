@@ -74,7 +74,7 @@ static const uint8_t ADC = 10;
 #define LED_OFF LOW
 
 // Font sizes
-#define FP 1
+// FP comes from precompiler_flags.h; a variant-level FP macro collides with FastLED 3.10.
 #define FM 2
 #define FG 3
 
