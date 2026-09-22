@@ -66,9 +66,11 @@ static const uint8_t SCK  = 12;
 #define SPI_READ_FREQUENCY 20000000
 
 // ----- Font Sizes -----
-#define FP 1
-#define FM 2
-#define FG 3
+// NOTE: FP/FM/FG are intentionally NOT defined here. They come from
+// include/precompiler_flags.h (via globals.h) with identical values (1/2/3).
+// Defining FP in the Arduino variant header breaks third-party libraries
+// (FastLED 3.10 uses `FP` as a C++ identifier in its animartrix code and every
+// library TU includes pins_arduino.h through Arduino.h).
 
 // ========================================================================
 //  XPT2046 Touchscreen -- on FSPI (SPI2), separate from TFT
