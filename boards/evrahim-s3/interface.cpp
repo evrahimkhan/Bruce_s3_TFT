@@ -46,13 +46,20 @@ void _setup_gpio() {
 ** Description:   second stage gpio setup to make a few functions work
 ***************************************************************************************/
 void _post_setup_gpio() {
-    // Initialize XPT2046 touch on its own FSPI bus (separate from TFT HSPI)
-    if (!touch.begin(acquireSPIBus(
-            (gpio_num_t)XPT2046_SPI_BUS_SCLK_IO_NUM,
-            (gpio_num_t)XPT2046_SPI_BUS_MISO_IO_NUM,
-            (gpio_num_t)XPT2046_SPI_BUS_MOSI_IO_NUM
-        ))) {
-        Serial.println("XPT2046 touchscreen initialization failed!");
+    // Initialize XPT2046 touch on its own FSPI bus (separate from TFT HSPI).
+    // If no hardware controller is left for these pins, fall back to the
+    // bit-banged path: the no-arg begin() configures the MOSI/MISO/CLK
+    // pin modes that begin(SPIClass*) skips, so it must be used instead of
+    // passing a nullptr bus handle.
+    SPIClass *touchBus = acquireSPIBus(
+        (gpio_num_t)XPT2046_SPI_BUS_SCLK_IO_NUM,
+        (gpio_num_t)XPT2046_SPI_BUS_MISO_IO_NUM,
+        (gpio_num_t)XPT2046_SPI_BUS_MOSI_IO_NUM
+    );
+    if (touchBus != nullptr) touch.begin(touchBus);
+    else {
+        Serial.println("XPT2046: no HW SPI bus for touch pins, using bit-banged SPI");
+        touch.begin();
     }
 
     // Backlight PWM -- must be initialized after tft.init()
@@ -62,6 +69,12 @@ void _post_setup_gpio() {
     pinMode(TFT_BL, OUTPUT);
     ledcAttach(TFT_BL, TFT_BRIGHT_FREQ, TFT_BRIGHT_Bits);
     ledcWrite(TFT_BL, 255);
+
+    // Force sync color inversion: _setup_gpio() runs before bruceConf.json is
+    // loaded from storage, so a stale saved value would otherwise override the
+    // default this panel needs (same approach as the CYD boards).
+    bruceConfig.colorInverted = 0;
+    tft.invertDisplay(0);
 
     // Set default RF/IR pin config
     bruceConfigPins.gps_bus.rx = (gpio_num_t)GPS_SERIAL_RX;
@@ -126,8 +139,10 @@ void InputHandler(void) {
             if (bruceConfigPins.rotation == 1) {
                 // Default Landscape (320x240) - 1:1 mapping from CYD28_TouchR
             } else if (bruceConfigPins.rotation == 3) {
-                // Inverted Landscape (320x240)
+                // Inverted Landscape (320x240): 180-degree counterpart of
+                // rotation 1, so both axes must be flipped (matches CYD).
                 px = tftWidth - px;
+                py = (tftHeight + 20) - py;
             } else if (bruceConfigPins.rotation == 0) {
                 // Portrait (240x320)
                 int tmp = px;

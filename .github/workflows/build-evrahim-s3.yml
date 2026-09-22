@@ -1,0 +1,50 @@
+# Builds the Evrahim S3 custom board and uploads the flashable firmware.
+#
+# Push (or open a PR) and download `Bruce-evrahim-s3.bin` from the workflow run's
+# artifacts, then flash it with:
+#   esptool.py --port /dev/ttyACM0 write_flash 0x00000 Bruce-evrahim-s3.bin
+
+name: Build evrahim-s3
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install 32-bit host GCC (mquickjs header generator)
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib libc6-dev-i386
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: ${{ runner.os }}-pio-evrahim-s3-${{ hashFiles('platformio.ini', 'boards/evrahim-s3/evrahim-s3.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-evrahim-s3-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build evrahim-s3 firmware
+        run: pio run -e evrahim-s3
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bruce-evrahim-s3
+          path: Bruce-evrahim-s3.bin
+          if-no-files-found: error

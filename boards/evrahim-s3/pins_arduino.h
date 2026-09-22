@@ -47,10 +47,12 @@ static const uint8_t SCK  = 12;
 
 #define USER_SETUP_LOADED 1
 #define ST7789_DRIVER 1
-#define TFT_RGB_ORDER 1
+// TFT_RGB = Red-Green-Blue order. If red and blue look swapped on your panel,
+// change this to TFT_BGR.
+#define TFT_RGB_ORDER TFT_RGB
 #define TFT_WIDTH 240
 #define TFT_HEIGHT 320
-#define TFT_BACKLIGHT_ON 1
+#define TFT_BACKLIGHT_ON HIGH
 #define TFT_BL 7
 #define TFT_RST 14
 #define TFT_DC 9
@@ -72,7 +74,8 @@ static const uint8_t SCK  = 12;
 //  XPT2046 Touchscreen -- on FSPI (SPI2), separate from TFT
 // ========================================================================
 #define HAS_TOUCH 1
-#define TOUCH_XPT2046_SPI
+// NOTE: TOUCH_XPT2046_SPI is defined via -D in evrahim-s3.ini (same convention
+// as the lilygo-t-hmi and marauder-touch boards).
 #define XPT2046_SPI_BUS_SCLK_IO_NUM  38
 #define XPT2046_SPI_BUS_MOSI_IO_NUM  39
 #define XPT2046_SPI_BUS_MISO_IO_NUM  40

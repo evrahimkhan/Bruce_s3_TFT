@@ -31,8 +31,14 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-#define CYD28_TouchR_Z_THRESH       300
-#define CYD28_TouchR_Z_THRES_INT  75
+// Boards may override these tunables with -D build flags (see e.g.
+// boards/evrahim-s3/evrahim-s3.ini). Defaults below target the CYD-2432S028.
+#ifndef CYD28_TouchR_Z_THRESH
+#define CYD28_TouchR_Z_THRESH 300
+#endif
+#ifndef CYD28_TouchR_Z_THRES_INT
+#define CYD28_TouchR_Z_THRES_INT 75
+#endif
 
 // These definitions come from https://github.com/rzeldent/platformio-espressif32-sunton board definitions
 #if defined(TOUCH_XPT2046_SPI)
@@ -49,11 +55,19 @@
   #define CYD28_TouchR_CS   33
 
 #endif
-// CALIBRAION VALUES
+// CALIBRAION VALUES (overridable per board via -D build flags)
+#ifndef CYD28_TouchR_CAL_XMIN
 #define CYD28_TouchR_CAL_XMIN 185
+#endif
+#ifndef CYD28_TouchR_CAL_XMAX
 #define CYD28_TouchR_CAL_XMAX 3700
+#endif
+#ifndef CYD28_TouchR_CAL_YMIN
 #define CYD28_TouchR_CAL_YMIN 280
+#endif
+#ifndef CYD28_TouchR_CAL_YMAX
 #define CYD28_TouchR_CAL_YMAX 3850
+#endif
 
 
 class CYD28_TS_Point {
