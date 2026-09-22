@@ -19,7 +19,12 @@ esptool.py --port /dev/ttyACM0 write_flash 0x00000 Bruce-evrahim-s3.bin
 
 No local toolchain? Push to GitHub and the `build-evrahim-s3` workflow
 (`.github/workflows/build-evrahim-s3.yml`) compiles the firmware and uploads
-`Bruce-evrahim-s3.bin` as an artifact.
+`Bruce-evrahim-s3.bin` as an artifact. Or trigger a cloud build on demand and
+auto-download the result with (requires the GitHub CLI, `gh auth login`):
+
+```sh
+./tools/run_firmware_build.sh [--branch BRANCH] [--out DIR] [--no-wait]
+```
 
 ## Wiring
 

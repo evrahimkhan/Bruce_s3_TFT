@@ -8,8 +8,12 @@ name: Build evrahim-s3
 
 on:
   push:
+    paths-ignore:
+      - "**.md" # docs-only changes don't need a rebuild
   pull_request:
-  workflow_dispatch:
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch: # manual runs from the Actions tab or tools/run_firmware_build.sh always build
 
 permissions:
   contents: write # needed to post the build-log tail as a commit comment on failure
