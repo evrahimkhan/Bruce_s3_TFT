@@ -293,29 +293,55 @@ bool initializeDeauthMode(int channel, WiFiState &savedState) {
 
     if (currentSsid.length() == 0) { currentSsid = "Wi-Fi_AP"; }
 
-    int attempts = 0;
-    bool apStarted = false;
-    while (attempts < 5 && !apStarted) {
-        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 0, 1, false);
-        if (!apStarted) {
+    // The target's channel is not always usable as a softAP channel (country /
+    // driver limits reject e.g. ch 12-14). The AP is only a TX interface for
+    // raw injection, so try the target channel first and fall back to safe
+    // channels instead of failing the whole attack.
+    const int apChannelCandidates[] = {channel, 1, 6, 11};
+    int apChannel = 0;
+    for (int c = 0; c < 4 && apChannel == 0; c++) {
+        int ch = apChannelCandidates[c];
+        if (ch < 1 || ch > 14) continue;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            if (WiFi.softAP(currentSsid.c_str(), emptyString, ch, 0, 1, false)) {
+                apChannel = ch;
+                break;
+            }
             delay(100);
-            attempts++;
         }
     }
 
-    if (!apStarted) {
+    if (apChannel == 0) {
         WiFi.disconnect(true);
         delay(100);
         WiFi.mode(WIFI_OFF);
         delay(100);
         WiFi.mode(WIFI_AP);
         delay(100);
-        apStarted = WiFi.softAP(currentSsid.c_str(), emptyString, channel, 0, 1, false);
+        for (int c = 0; c < 4 && apChannel == 0; c++) {
+            int ch = apChannelCandidates[c];
+            if (ch < 1 || ch > 14) continue;
+            if (WiFi.softAP(currentSsid.c_str(), emptyString, ch, 0, 1, false)) apChannel = ch;
+        }
     }
 
-    if (!apStarted) {
-        displayError("Failed to start Deauth AP", true);
+    if (apChannel == 0) {
+        displayError("Deauth AP failed, ch " + String(channel), true);
         return false;
+    }
+    if (apChannel != channel) {
+        Serial.printf("[DEAUTH] AP on fallback ch %d (target ch %d)\n", apChannel, channel);
+    }
+
+    // Hop the radio onto the TARGET channel for frame injection. The AP stays
+    // up on its own channel; raw 802.11 TX follows the radio channel.
+    esp_err_t chErr = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    if (chErr != ESP_OK) {
+        Serial.printf("[DEAUTH] set_channel(%d) failed: %s\n", channel, esp_err_to_name(chErr));
+        if (apChannel != channel) {
+            displayError("Deauth blocked: ch " + String(channel) + " not allowed", true);
+            return false;
+        }
     }
 
     vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -448,6 +474,11 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
     PrevPress = false;
     NextPress = false;
     delay(100);
+
+    // Single-target mode never re-tunes inside its loop, so pin the radio to
+    // the target channel here (the AP itself may live on a fallback channel).
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 
     long tmp = millis();
     int cont = 0;

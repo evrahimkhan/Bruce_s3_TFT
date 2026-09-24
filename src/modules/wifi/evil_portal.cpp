@@ -133,8 +133,34 @@ void EvilPortal::beginAP() {
     if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
         Serial.println("[PORTAL] softAPConfig failed");
     }
-    if (!WiFi.softAP(apName, emptyString, _channel)) {
+    // The clone target's channel may be rejected as an AP channel (country /
+    // driver limits, e.g. ch 12-14). Keep the clone SSID and fall back to safe
+    // channels: otherwise the stale "BruceAttack" AP from the wifi menu keeps
+    // broadcasting and the on-screen SSID becomes a lie.
+    const uint8_t apChannelCandidates[] = {_channel, 1, 6, 11};
+    bool apOk = false;
+    for (int i = 0; i < 4 && !apOk; i++) {
+        uint8_t ch = apChannelCandidates[i];
+        if (ch < 1 || ch > 14) continue;
+        for (int attempt = 0; attempt < 3 && !apOk; attempt++) {
+            apOk = WiFi.softAP(apName, emptyString, ch);
+            if (!apOk) delay(100);
+        }
+        if (apOk && ch != _channel) {
+            Serial.printf("[PORTAL] clone AP on fallback ch %d (target ch %d)\n", ch, _channel);
+        }
+    }
+    if (!apOk) {
         Serial.printf("[PORTAL] softAP failed for SSID '%s' on ch%d\n", apName.c_str(), _channel);
+        if (!_backgroundMode) displayError("Portal AP failed!", true);
+    }
+    // Hop the radio onto the target channel so deauth injection hits the real
+    // AP even when the clone beacons on a fallback channel.
+    if (_deauth && _channel >= 1 && _channel <= 14) {
+        esp_err_t chErr = esp_wifi_set_channel(_channel, WIFI_SECOND_CHAN_NONE);
+        if (chErr != ESP_OK) {
+            Serial.printf("[PORTAL] set_channel(%d) failed: %s\n", _channel, esp_err_to_name(chErr));
+        }
     }
     wifiConnected = true;
 
@@ -428,9 +454,15 @@ void EvilPortal::checkAndExtendDuration() {
 void EvilPortal::drawScreen() {
     drawMainBorderWithTitle("EVIL PORTAL");
 
-    String subtitle = "AP: " + apName.substring(0, 30);
-    if (apName.length() > 30) subtitle += "...";
+    // Show the SSID the radio REALLY broadcasts (softAP can fail and leave a
+    // stale AP up), and flag any mismatch with the intended clone.
+    String liveSsid = WiFi.softAPSSID();
+    String shownSsid = liveSsid.length() ? liveSsid : apName;
+    String subtitle = "AP: " + shownSsid.substring(0, 30);
+    if (shownSsid.length() > 30) subtitle += "...";
     printSubtitle(subtitle);
+    if (!liveSsid.length()) padprintln("AP DOWN - no signal!");
+    else if (liveSsid != apName) padprintln("(want: " + apName.substring(0, 24) + ")");
 
     String apIp = WiFi.softAPIP().toString();
     padprintln("");
