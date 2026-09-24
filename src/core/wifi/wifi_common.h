@@ -43,6 +43,11 @@ String checkMAC();
  * reduced. Here we retry briefly, yielding 1 tick for the driver to drain: injection
  * becomes self-regulated and independent of LTO and buffer count.
  *
+ * Also redirects the frame to whichever internal-radio interface (AP/STA) is
+ * actually up, so attacks inject even if they started while only the other
+ * interface was running (e.g. STA-connected with no softAP for AP-interface
+ * frames). No-op whenever the requested interface is already up.
+ *
  * @return ESP_OK if the frame was accepted; otherwise the last error.
  */
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries = 8);

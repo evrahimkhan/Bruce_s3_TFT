@@ -17,6 +17,16 @@ static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
+    // Raw injection must go out over a live internal-radio interface. Attacks
+    // normally bring up APSTA + softAP first, but if one started while the STA
+    // interface was the only one up (e.g. already connected to a network), an
+    // AP-interface frame would hit a dead interface and silently go nowhere.
+    // Redirect to whichever interface is actually up in that case.
+    wifi_mode_t mode;
+    if (esp_wifi_get_mode(&mode) == ESP_OK) {
+        if (ifx == WIFI_IF_AP && !(mode & WIFI_MODE_AP) && (mode & WIFI_MODE_STA)) ifx = WIFI_IF_STA;
+        else if (ifx == WIFI_IF_STA && !(mode & WIFI_MODE_STA) && (mode & WIFI_MODE_AP)) ifx = WIFI_IF_AP;
+    }
     esp_err_t err = esp_wifi_80211_tx(ifx, frame, len, false);
     for (uint8_t i = 0; err == ESP_ERR_NO_MEM && i < retries; i++) {
         vTaskDelay(1); // let the driver drain TX buffers and retry
