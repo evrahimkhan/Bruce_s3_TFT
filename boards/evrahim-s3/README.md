@@ -99,9 +99,9 @@ traffic starts.
 ## Tuning notes
 
 - **Touch calibration / pressure**: `evrahim-s3.ini` sets
-  `CYD28_TouchR_CAL_*` and `CYD28_TouchR_Z_THRESH`. The Z threshold is raised
-  to 500 to reject ghost touches from long unshielded wires — lower it if
-  light touches don't register, raise it if you get phantom touches.
+  `CYD28_TouchR_CAL_*` and `CYD28_TouchR_Z_THRESH` (300, verified on this
+  board). Lower it if light touches don't register, raise it in steps
+  (350/400/450) if you get phantom touches at idle.
 - **Colors look wrong**: if red and blue are swapped, change `TFT_RGB_ORDER`
   in `pins_arduino.h` from `TFT_RGB` to `TFT_BGR`. If the whole image looks
   like a photo negative, flip the forced `colorInverted` value in

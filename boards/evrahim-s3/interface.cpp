@@ -61,20 +61,6 @@ void _post_setup_gpio() {
         Serial.println("XPT2046: no HW SPI bus for touch pins, using bit-banged SPI");
         touch.begin();
     }
-#ifdef EVRAHIM_TOUCH_DEBUG
-    // TEMPORARY (touch diagnosis): report which SPI path + pins are in use.
-    Serial.printf(
-        "[TOUCH] bus=%s SCK=%d MOSI=%d MISO=%d CS=%d IRQ=%d Z_THRESH=%d\n",
-        touchBus != nullptr ? "HW-SPI" : "bit-bang",
-        XPT2046_SPI_BUS_SCLK_IO_NUM,
-        XPT2046_SPI_BUS_MOSI_IO_NUM,
-        XPT2046_SPI_BUS_MISO_IO_NUM,
-        XPT2046_SPI_CONFIG_CS_GPIO_NUM,
-        XPT2046_TOUCH_CONFIG_INT_GPIO_NUM,
-        CYD28_TouchR_Z_THRESH
-    );
-#endif
-
     // Backlight PWM -- must be initialized after tft.init()
 #define TFT_BRIGHT_CHANNEL 0
 #define TFT_BRIGHT_Bits 8
@@ -139,24 +125,6 @@ void _setBrightness(uint8_t brightval) {
 ** and EscPress via XPT2046 touch input.
 **********************************************************************/
 void InputHandler(void) {
-#ifdef EVRAHIM_TOUCH_DEBUG
-    // TEMPORARY (touch diagnosis): dump raw readings + IRQ/ISR state twice a
-    // second. Touch the screen and watch how x/y/z react.
-    static unsigned long dbgLast = 0;
-    if (millis() - dbgLast > 500) {
-        dbgLast = millis();
-        auto r = touch.getPointRaw();
-        Serial.printf(
-            "[TOUCH] raw x=%d y=%d z=%d isrWake=%d irqLvl=%d touched=%d\n",
-            r.x,
-            r.y,
-            r.z,
-            touch.isrWake ? 1 : 0,
-            digitalRead(XPT2046_TOUCH_CONFIG_INT_GPIO_NUM),
-            touch.touched() ? 1 : 0
-        );
-    }
-#endif
     static long d_tmp = 0;
     if (millis() - d_tmp > 200 || LongPress) {
         if (touch.touched()) {
