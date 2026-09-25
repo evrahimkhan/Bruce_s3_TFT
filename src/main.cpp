@@ -450,6 +450,7 @@ void setup() {
         SAFE_STACK_BUFFER_SIZE / 4
     ); // Must be invoked before Serial.begin(). Default is 256 chars
     Serial.begin(115200);
+    randomSeed(esp_random()); // seed PRNG for WebUI tokens (unseeded random() is predictable)
 
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
@@ -501,19 +502,9 @@ void setup() {
 
     RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
-    // Set WiFi country to avoid warnings and ensure max power
-    const wifi_country_t country = {
-        .cc = "US",
-        .schan = 1,
-        .nchan = 14,
-#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
-        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
-#endif
-        .policy = WIFI_COUNTRY_POLICY_MANUAL
-    };
-
-    esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
-    esp_wifi_set_country(&country);
+    // NOTE: no boot-time country/TX setup here - the Wi-Fi driver isn't up yet so
+    // esp_wifi_set_country() is dead on arrival. Attacks that need ch 12/13 call
+    // wifiSetPermissiveCountry() at point of use instead (see wifi_common.h).
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();

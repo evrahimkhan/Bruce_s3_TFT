@@ -223,18 +223,24 @@ void createDirRecursive(const String &path, FS fs) {
 void handleUpload(
     AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final
 ) {
+    // Per-upload encrypted-chunk counter (reset for every new upload below).
+    static int chunck_no = 0;
     if (checkUserWebAuth(request)) {
         if (uploadFolder == "/") uploadFolder = "";
         if (!index) {
+            chunck_no = 0; // new upload: allow the first encrypted chunk again
             if (request->hasArg("password")) filename = filename + ".enc";
             // Serial.println("File: " + uploadFolder + "/" + filename);
             String relativePath = filename;
             String fullPath = uploadFolder + "/" + relativePath;
             String dirPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
             if (dirPath.length() > 0) { createDirRecursive(dirPath, _webFS); }
+            // Bounded retry: the FS may need a moment after dir creation, but a
+            // broken/full FS must not hang the request worker forever.
+            int open_retries = 500;
         RETRY:
             request->_tempFile = _webFS.open(uploadFolder + "/" + filename, "w");
-            if (!request->_tempFile) {
+            if (!request->_tempFile && open_retries-- > 0) {
                 // Serial.println("Failed to open file for writing: " + uploadFolder + "/" + filename);
                 goto RETRY;
             }
@@ -243,7 +249,6 @@ void handleUpload(
         if (len) {
             if (request->hasArg("password")) {
                 // encryption requested
-                static int chunck_no = 0;
                 if (chunck_no != 0) {
                     // TODO: handle multiple chunks
                     request->send(404, "text/html", "file is too big");
@@ -731,9 +736,8 @@ void configureWebServer() {
                 const char *usr = request->arg("usr").c_str();
                 const char *pwd = request->arg("pwd").c_str();
                 bruceConfig.setWebUICreds(usr, pwd);
-                request->send(
-                    200, "text/plain", "User: " + String(usr) + " configured with password: " + String(pwd)
-                );
+                // Never echo the password back: the response may be logged or sniffed.
+                request->send(200, "text/plain", "User: " + String(usr) + " configured");
             }
         }
     });

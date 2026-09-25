@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
+#include "core/wifi/wifi_common.h" // wifiDisconnect() for exit-time Wi-Fi restore
 
 void ReverseShell() {
     AsyncWebServer webServer(80);
@@ -31,7 +32,13 @@ void ReverseShell() {
 
             case WS_EVT_DATA:
                 if (shellConnected && tcpClient) {
-                    String cmd = String((char*)data);
+                    // Bound the copy: WS frames are not NUL-terminated, so the
+                    // old String((char*)data) could over-read past `len`.
+                    char cmdBuf[257];
+                    size_t cmdLen = len > 256 ? 256 : len;
+                    memcpy(cmdBuf, data, cmdLen);
+                    cmdBuf[cmdLen] = '\0';
+                    String cmd = String(cmdBuf);
                     cmd.trim();
                     if (cmd.length() > 0) {
                         tcpClient.println(cmd);
@@ -82,13 +89,13 @@ void ReverseShell() {
         return;
     }
 
-    // ── AP Password: bruce ─────────────────────────────────────
-    if (!WiFi.softAP("BruceShell", "bruce")) {
+    // ── AP Password (min 8 chars, else the AP silently runs OPEN) ──
+    if (!WiFi.softAP("BruceShell", "bruceshell")) {
         tft.println("Failed to start AP");
         return;
     }
 
-    tft.println("Wi-Fi AP Started: BruceShell (pass: bruce)");
+    tft.println("Wi-Fi AP Started: BruceShell (pass: bruceshell)");
     tft.println("IP: " + apGateway.toString());
 
     tcpServer.begin();
@@ -195,6 +202,9 @@ void ReverseShell() {
             ws.closeAll();
             webServer.end();
             dnsServer.stop();
+            // Restore Wi-Fi: don't leave the BruceShell AP (and AP mode) behind.
+            WiFi.softAPdisconnect(true);
+            wifiDisconnect();
             break;
         }
         delay(10);

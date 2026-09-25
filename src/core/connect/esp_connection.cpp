@@ -191,17 +191,24 @@ void EspConnection::onDataSent(const uint8_t *mac_addr, esp_now_send_status_t st
 }
 
 void EspConnection::onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+    // Never trust the sender: a short or missing packet must not over-read the RX buffer.
+    if (!incomingData || len < (int)sizeof(Message)) return;
     Message recvMessage;
 
-    // Use reinterpret_cast and copy assignment
-    const Message *incomingMessage = reinterpret_cast<const Message *>(incomingData);
-    recvMessage = *incomingMessage; // Use copy assignment
+    // Fixed-size copy (alignment-safe); then clamp attacker-controlled fields.
+    memcpy(&recvMessage, incomingData, sizeof(Message));
+    if (recvMessage.dataSize > ESP_DATA_SIZE) recvMessage.dataSize = ESP_DATA_SIZE;
+    recvMessage.data[ESP_DATA_SIZE - 1] = '\0';
+    recvMessage.filename[ESP_FILENAME_SIZE - 1] = '\0';
+    recvMessage.filepath[ESP_FILEPATH_SIZE - 1] = '\0';
 
     printMessage(recvMessage);
 
     if (recvMessage.ping) return sendPong(mac);
     if (recvMessage.pong) return appendPeerToList(mac);
 
+    // Bound the queue: under flood, drop the newest packet instead of growing forever.
+    if (recvQueue.size() >= 32) return;
     recvQueue.push_back(recvMessage);
 }
 
