@@ -2,25 +2,26 @@
 
 ## Project
 
-Bruce -- ESP32 offensive-security multi-tool firmware. PlatformIO + Arduino framework (C/C++). Targets ~60 board variants across ESP32, ESP32-S3, ESP32-C5, and ESP32-C6.
+Bruce -- ESP32 offensive-security multi-tool firmware. PlatformIO + Arduino framework (C/C++).
+**This fork is evrahim-s3 only**: a single custom ESP32-S3 board (ST7789 TFT + XPT2046 touch +
+CC1101 + NRF24). All other upstream board variants were stripped from the tree.
 
 ## Build
 
 ```sh
-# Build the default env (m5stack-cardputer):
+# Build the only env (evrahim-s3):
 pio run
-
-# Build a specific board:
-pio run -e m5stack-cplus2
+pio run -e evrahim-s3
 
 # Upload to a connected device:
-pio run -e m5stack-cardputer -t upload
+pio run -e evrahim-s3 -t upload
 ```
 
-- Default env is `m5stack-cardputer` (set in `platformio.ini` `[platformio]` section).
-- Board env names are in `platformio.ini` and in `boards/<board>/<board>.ini` files. Env names prefixed with `LAUNCHER_` produce a LITE_VERSION build for M5Launcher compatibility.
+- The only env is `evrahim-s3` (declared in `boards/evrahim-s3/evrahim-s3.ini`, included via
+  `extra_configs` globs; also the `[platformio]` `default_envs`).
+- There are no `LAUNCHER_*` / `LITE_VERSION` envs in this fork.
 - **LTO is enabled** (`-flto`). `flto_prep.py` strips `-fno-lto` from link flags. The build flag `-Werror=odr` treats One Definition Rule violations as errors -- any duplicate symbol definition across translation units will fail the build.
-- The post-build script `build.py` merges bootloader + partitions + app into a single `Bruce-<env>.bin` at the repo root and checks firmware size against the OTA partition.
+- The post-build script `build.py` merges bootloader + partitions + app into a single `Bruce-evrahim-s3.bin` at the repo root and checks firmware size against the OTA partition.
 
 ### Pre-build scripts (run automatically via `extra_scripts`)
 
@@ -40,11 +41,8 @@ pio run -e m5stack-cardputer -t upload
 
 ### Partition tables
 
-Root CSV files: `custom_4Mb.csv`, `custom_4Mb_full.csv`, `custom_8Mb.csv`, `custom_16Mb.csv`. Each board `.ini` selects one via `board_build.partitions`.
-
-### Docker
-
-`docker-compose.yml` + `docker/Dockerfile.ci` provide a containerized build. Set `PIO_ENVS` env var to select target.
+Only `custom_16Mb.csv` remains at the root; `boards/evrahim-s3/evrahim-s3.ini` selects it via
+`board_build.partitions`. (Upstream's 4Mb/8Mb tables were deleted with the other boards.)
 
 ## Architecture
 
@@ -56,27 +54,27 @@ src/
   core/             -- shared infrastructure (config, display, keyboard, SD, wifi, settings, serial CLI)
   modules/          -- feature modules (wifi, ble, rf, rfid, ir, fm, gps, NRF24, badusb_ble, bjs_interpreter, ...)
 include/            -- global headers (globals.h, interface.h, precompiler_flags.h)
-boards/<board>/     -- per-board: interface.cpp, <board>.ini, pins_arduino.h
-boards/pinouts/     -- shared variant files
-boards/_boards_json/ -- PlatformIO board JSON definitions
+boards/evrahim-s3/  -- the board: interface.cpp, evrahim-s3.ini, pins_arduino.h
+boards/pinouts/     -- Arduino variant dispatcher (evrahim-s3 only, errors otherwise)
+boards/_boards_json/ -- PlatformIO board JSON definition (evrahim-s3.json only)
 lib/                -- vendored libraries (TFT_eSPI, HAL, RTC, etc.)
 embedded_resources/ -- web UI source (HTML/CSS/JS) -> compiled into webFiles.h
 ```
 
 ### Board support pattern
 
-Each board has three files in `boards/<board>/`:
+`boards/evrahim-s3/` holds the three board files:
 
-1. **`<board>.ini`** -- PlatformIO env config: partition table, build flags (pin definitions, feature flags like `HAS_SCREEN`, `HAS_RGB_LED`, `USB_as_HID`, display driver, etc.), and extra lib_deps.
+1. **`evrahim-s3.ini`** -- PlatformIO env config: partition table, build flags (pin definitions, feature flags like `HAS_SCREEN`, `USB_as_HID`, display driver, etc.), and extra lib_deps.
 2. **`pins_arduino.h`** -- Arduino variant pin definitions.
-3. **`interface.cpp`** -- Implements `_setup_gpio()`, `_post_setup_gpio()`, `InputHandler()`, `getBattery()`, `_setBrightness()`, `powerOff()`, etc. These are weak functions in `main.cpp` that each board overrides. The `boards/_New-Device-Model/` directory is a template.
+3. **`interface.cpp`** -- Implements `_setup_gpio()`, `_post_setup_gpio()`, `InputHandler()`, `getBattery()`, `_setBrightness()`, `powerOff()`, etc. These are weak functions in `main.cpp` that the board overrides.
 
-The `build_src_filter` in each board `.ini` includes `+<../boards/<board>>` so that board's `interface.cpp` is compiled into the build.
+The `build_src_filter` in `evrahim-s3.ini` includes `+<../boards/evrahim-s3>` so the board's `interface.cpp` is compiled into the build.
 
 ### Key globals and patterns
 
 - Global state lives in `main.cpp` and is declared `extern` in `include/globals.h`: `bruceConfig`, `bruceConfigPins`, `tft`, `sprite`, `draw`, navigation press flags (`NextPress`, `SelPress`, `EscPress`, etc.).
-- Feature availability is controlled by preprocessor flags in board `.ini` files (e.g., `HAS_SCREEN`, `LITE_VERSION`, `HAS_NS4168_SPKR`, `USB_as_HID`, `HAS_ENCODER`, `HAS_RTC`).
+- Feature availability is controlled by preprocessor flags in the board `.ini` (e.g., `HAS_SCREEN`, `LITE_VERSION`, `HAS_NS4168_SPKR`, `USB_as_HID`, `HAS_ENCODER`, `HAS_RTC`).
 - `include/precompiler_flags.h` provides defaults for all optional pin/feature defines.
 - `src/core/config.h` / `src/core/configPins.h` define `BruceConfig` and `BruceConfigPins` (runtime config loaded from filesystem).
 - Input handling runs on a FreeRTOS task (`taskInputHandler`). Boards with rotary encoders also get a dedicated `taskEncoderPoll` task at priority 3.
@@ -84,7 +82,8 @@ The `build_src_filter` in each board `.ini` includes `+<../boards/<board>>` so t
 
 ### Flash size constraints
 
-Most boards use 8MB or 16MB flash but some (CYD, older M5 devices) use 4MB. `env_4mb` restricts IR protocols and `env_light` / `LITE_VERSION` disables features (TelNet, SSH, WireGuard, interpreter, etc.) to fit. Check firmware size against the OTA partition -- the build will error if it exceeds the limit.
+evrahim-s3 has 16MB flash (`custom_16Mb.csv`, no OTA slots -- updates go over USB). Check firmware size
+against the app partition -- the build will error if it exceeds the limit.
 
 ## Code style
 
@@ -94,6 +93,8 @@ Most boards use 8MB or 16MB flash but some (CYD, older M5 devices) use 4MB. `env
 
 ## CI
 
-- **PR check** (`PR_check.yml`): Builds a representative subset of boards (Cardputer, CPlus2, headless S3, CoreS3, CYD launcher, C5, C6) on PRs to `main`/`dev`.
-- **Release build** (`buil_parallel.yml`): Builds all ~60 board variants on push to `main`/`dev` or on tags. Tagged builds create GitHub releases.
+- **Build evrahim-s3** (`.github/workflows/build-evrahim-s3.yml`): builds the single `evrahim-s3` env on
+  every push/PR and uploads `Bruce-evrahim-s3.bin` as an artifact. Upstream's multi-board workflows
+  (`PR_check.yml`, `buil_parallel.yml`, etc.) were removed with the other boards.
 - CI requires `gcc-multilib` and `libc6-dev-i386` for mquickjs header generation.
+- `tools/run_firmware_build.sh` triggers the workflow on demand and downloads the resulting `.bin`.
