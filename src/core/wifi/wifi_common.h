@@ -53,6 +53,19 @@ String checkMAC();
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries = 8);
 
 /**
+ * @brief Forces a permissive 2.4 GHz regulatory domain (JP: ch 1-14, MANUAL
+ * policy) + max TX power so attack setup can use channels 12/13 (common
+ * outside the US) for softAP and raw injection.
+ *
+ * main.cpp tries this at boot, but the WiFi driver is not initialized yet at
+ * that point, so the call silently fails and the driver keeps a restrictive
+ * (1-11) domain. Call this while the driver is up and it actually applies.
+ *
+ * @return true when the driver reports >= 13 usable channels afterwards.
+ */
+bool wifiSetPermissiveCountry();
+
+/**
  * @brief tries to connect to min(found_networks, maxSearch) networks
  * using stored passwords
  * @TODO fix: rn it skips open networks due to password == "" check

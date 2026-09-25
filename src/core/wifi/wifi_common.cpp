@@ -35,6 +35,34 @@ esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t re
     return err;
 }
 
+bool wifiSetPermissiveCountry() {
+    wifi_country_t cc;
+    memset(&cc, 0, sizeof(cc));
+    memcpy(cc.cc, "JP", 3); // JP allows ch 1-14; MANUAL stops 802.11d shrinking it
+    cc.schan = 1;
+    cc.nchan = 14;
+#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
+    cc.max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER;
+#endif
+    cc.policy = WIFI_COUNTRY_POLICY_MANUAL;
+
+    esp_err_t err = esp_wifi_set_max_tx_power(80); // 20 dBm, as boot intends
+    if (err != ESP_OK) Serial.printf("[WIFI] set_max_tx_power failed: %s\n", esp_err_to_name(err));
+
+    err = esp_wifi_set_country(&cc);
+    if (err != ESP_OK) {
+        Serial.printf("[WIFI] set_country(JP/1-14) failed: %s\n", esp_err_to_name(err));
+        return false;
+    }
+    wifi_country_t cur;
+    memset(&cur, 0, sizeof(cur));
+    if (esp_wifi_get_country(&cur) == ESP_OK) {
+        Serial.printf("[WIFI] country now %.2s schan=%d nchan=%d\n", cur.cc, cur.schan, cur.nchan);
+        return cur.nchan >= 13;
+    }
+    return true;
+}
+
 void ensureWifiPlatform() {
     static bool netifInitialized = false;
     static bool eventLoopCreated = false;

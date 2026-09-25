@@ -204,6 +204,10 @@ bool wifi_atk_setWifi() {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
+    // Unlock ch 12/13 for attacks on non-US targets (boot-time country set
+    // never applies - the driver isn't up yet at that point).
+    wifiSetPermissiveCountry();
+
     if (WiFi.softAPSSID() != bruceConfig.wifiAp.ssid && WiFi.softAPSSID() != WIFI_ATK_NAME) {
         uint8_t randomChannel = random(1, 12);
 

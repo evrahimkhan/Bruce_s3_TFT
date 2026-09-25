@@ -291,6 +291,10 @@ bool initializeDeauthMode(int channel, WiFiState &savedState) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
+    // Unlock ch 12/13 for the AP + injection. The boot-time country set runs
+    // before the driver exists so it never applies - do it now while WiFi is up.
+    wifiSetPermissiveCountry();
+
     if (currentSsid.length() == 0) { currentSsid = "Wi-Fi_AP"; }
 
     // The target's channel is not always usable as a softAP channel (country /
