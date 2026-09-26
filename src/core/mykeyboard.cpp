@@ -476,7 +476,11 @@ String generalKeyboard(
 
     bool direction = true;
     bool last_dir = true;
-    const int buttons_number = 5 + HAS_1_BUTTON;
+    // Eye toggle (show/hide password) exists only for masked inputs; it is appended
+    // after the last stock button. Arrays are sized for the max; loops use buttons_number.
+    const bool has_eye = mask_input;
+    const int buttons_number = 5 + HAS_1_BUTTON + (has_eye ? 1 : 0);
+    const int eye_index = 5 + HAS_1_BUTTON; // valid only when has_eye
 
     /*-----------------------------HOW btns_layout IS CALCULATED-----------------------------*/
     // const char *buttons_strings[] = {"OK", "CAP", "DEL", "SPACE", "BACK"};
@@ -511,7 +515,7 @@ String generalKeyboard(
     const int textbox_text_y = textbox_y + 2;
     const int keyboard_start_y = textbox_y + KBLH + 2;
 
-    const int btns_layout[buttons_number][3] = {
+    const int btns_layout[6 + HAS_1_BUTTON][3] = {
         {1 * PAD + 0 * LW * FM,  3 * LW * FM, 1 * PAD + 0 * LW * FM + LW * FM / 2  }, // Ok
         {2 * PAD + 3 * LW * FM,  3 * LW * FM, 2 * PAD + 3 * LW * FM + LW * FM / 2  }, // ab/A@
         {3 * PAD + 6 * LW * FM,  3 * LW * FM, 3 * PAD + 6 * LW * FM + LW * FM / 2  }, // <-
@@ -519,6 +523,9 @@ String generalKeyboard(
         {5 * PAD + 12 * LW * FM, 3 * LW * FM, 5 * PAD + 12 * LW * FM + LW * FM / 2 }, // Ex
 #if HAS_1_BUTTON
         {6 * PAD + 15 * LW * FM, 4 * LW * FM, 6 * PAD + 15 * LW * FM + LW * FM / 2 }, // R/D or L/U
+        {7 * PAD + 19 * LW * FM, 3 * LW * FM, 7 * PAD + 19 * LW * FM + LW * FM / 2 }, // Eye (show/hide)
+#else
+        {6 * PAD + 15 * LW * FM, 3 * LW * FM, 6 * PAD + 15 * LW * FM + LW * FM / 2 }, // Eye (show/hide)
 #endif
     };
 
@@ -530,7 +537,7 @@ String generalKeyboard(
 #if defined(HAS_TOUCH) // filling touch box list
     // Calculate actual box count
     const int keyboard_boxes = KeyboardHeight * KeyboardWidth;
-    const int box_count = keyboard_boxes + buttons_number;
+    const int box_count = keyboard_boxes + 6 + HAS_1_BUTTON; // max: tail box unused when no eye
 
     box_t box_list[box_count];
 
@@ -677,6 +684,22 @@ String generalKeyboard(
                 } else tft.setTextColor(getComplementaryColor2(bruceConfig.bgColor), bruceConfig.bgColor);
                 tft.drawString(direction ? "R/D" : "L/U", btns_layout[5][2], top_button_text_y);
 #endif
+                // EYE (show/hide password) — masked inputs only. Plain eye = hidden, tap
+                // to reveal; slashed eye = visible, tap to hide.
+                if (has_eye) {
+                    uint16_t eye_fg = getComplementaryColor2(bruceConfig.bgColor);
+                    if (x == eye_index && y == -1) {
+                        tft.fillRect(
+                            btns_layout[eye_index][0], 2, btns_layout[eye_index][1], KBLH, eye_fg
+                        );
+                        eye_fg = bruceConfig.bgColor;
+                    }
+                    int ex = btns_layout[eye_index][0] + btns_layout[eye_index][1] / 2;
+                    int ey = 2 + KBLH / 2;
+                    tft.drawCircle(ex, ey, 5, eye_fg);
+                    tft.fillCircle(ex, ey, 2, eye_fg);
+                    if (!mask_input) tft.drawLine(ex - 7, ey + 6, ex + 7, ey - 6, eye_fg);
+                }
             }
 
             // Prints the chars counter
@@ -872,6 +895,11 @@ String generalKeyboard(
                 if (box_list[buttons_start_index + 4].contain(touchPoint.x, touchPoint.y)) { // BACK btn
                     current_text = "\x1B"; // ASCII ESC CHARACTER
                     break;
+                }
+                if (has_eye &&
+                    box_list[buttons_start_index + eye_index].contain(touchPoint.x, touchPoint.y)) { // EYE btn
+                    mask_input = !mask_input;
+                    touchHandled = true;
                 }
 #if HAS_1_BUTTON
                 if (box_list[buttons_start_index + 5].contain(touchPoint.x, touchPoint.y)) { // DIRECTION btn
@@ -1284,17 +1312,22 @@ String generalKeyboard(
 
             if (selected_char == '\0') { continue; } // if we selected a key which have the value of
 
-            KeyboardAction action = handleKeyboardSelection(
-                x, y, current_text, caps, direction, cursor_x, cursor_y, max_size, selected_char, mask_input
-            );
-
-            if (action == KEYBOARD_OK) { // OK BTN
-                break;
-            } else if (action == KEYBOARD_CANCEL) { // BACK BTN
-                current_text = "\x1B";              // ASCII ESC CHARACTER
-                break;
-            } else if (action == KEYBOARD_REDRAW) {
+            if (has_eye && y == -1 && x == eye_index) {
+                mask_input = !mask_input; // EYE button: show/hide password
                 redraw = true;
+            } else {
+                KeyboardAction action = handleKeyboardSelection(
+                    x, y, current_text, caps, direction, cursor_x, cursor_y, max_size, selected_char, mask_input
+                );
+
+                if (action == KEYBOARD_OK) { // OK BTN
+                    break;
+                } else if (action == KEYBOARD_CANCEL) { // BACK BTN
+                    current_text = "\x1B";              // ASCII ESC CHARACTER
+                    break;
+                } else if (action == KEYBOARD_REDRAW) {
+                    redraw = true;
+                }
             }
 
             last_input_time = millis();
