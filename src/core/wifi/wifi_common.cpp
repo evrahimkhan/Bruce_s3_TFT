@@ -16,6 +16,16 @@
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
+// Last STA disconnect reason captured for connect-failure diagnostics (0 = none yet).
+static volatile uint8_t s_staDiscReason = 0;
+static bool s_staDiscHookInstalled = false;
+
+static void sta_disc_reason_handler(WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+        s_staDiscReason = info.wifi_sta_disconnected.reason;
+    }
+}
+
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
     // Raw injection must go out over a live internal-radio interface. Attacks
     // normally bring up APSTA + softAP first, but if one started while the STA
@@ -150,6 +160,12 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     WiFi.mode(WIFI_MODE_STA);
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
+    // Capture the 802.11 disconnect reason for this attempt (installed once).
+    if (!s_staDiscHookInstalled) {
+        WiFi.onEvent(sta_disc_reason_handler);
+        s_staDiscHookInstalled = true;
+    }
+    s_staDiscReason = 0;
     WiFi.begin(ssid, pwd);
 
     int i = 1;
@@ -165,9 +181,11 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
 #endif
 
         if (i > 30) {
-            // Tell the user WHY it failed: status still reflects the last error.
+            // Tell the user WHY it failed: stuck WiFi.status() first, then the
+            // captured 802.11 disconnect reason (more specific) overrides it.
             // (Keep strings short: displayError renders a single stripe.)
             String why = "Wifi Offline"; // timeout: AP/DHCP not answering
+            uint8_t reason = s_staDiscReason;
             switch (WiFi.status()) {
                 case WL_CONNECT_FAILED: why = "Wrong password?"; break;
                 case WL_NO_SSID_AVAIL:  why = "SSID not found"; break;
@@ -175,7 +193,37 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
                 case WL_DISCONNECTED:   why = "Signal lost"; break;
                 default:                break;
             }
-            Serial.printf("[wifi] connect '%s' failed, status=%d\n", ssid.c_str(), (int)WiFi.status());
+            if (reason != 0) {
+                switch (reason) {
+                    case 15:  // 4-way handshake timeout (often wrong password)
+                    case 16:  // group-key handshake timeout
+                    case 23:  // 802.1X auth failed
+                    case 24:  // cipher suite rejected
+                    case 202: // auth fail
+                    case 204: // handshake timeout
+                        why = "Auth fail r" + String((int)reason);
+                        break;
+                    case 201: why = "AP gone r201"; break;  // no AP found
+                    case 200: why = "Weak sig r200"; break; // beacon timeout
+                    case 203: // assoc fail
+                    case 205: // connection fail
+                        why = "AP reject r" + String((int)reason);
+                        break;
+                    case 2: // auth expired
+                    case 3: // auth leave
+                    case 8: // assoc leave
+                        why = "AP kicked r" + String((int)reason);
+                        break;
+                    case 5:      why = "AP full r5"; break; // assoc too many
+                    default:     why = "Wifi err r" + String((int)reason); break;
+                }
+            }
+            Serial.printf(
+                "[wifi] connect '%s' failed, status=%d reason=%u\n",
+                ssid.c_str(),
+                (int)WiFi.status(),
+                (unsigned)reason
+            );
             displayError(why);
             vTaskDelay(500 / portTICK_RATE_MS);
             break;
