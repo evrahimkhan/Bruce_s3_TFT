@@ -164,8 +164,19 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
         Serial.print(".");
 #endif
 
-        if (i > 20) {
-            displayError("Wifi Offline");
+        if (i > 30) {
+            // Tell the user WHY it failed: status still reflects the last error.
+            // (Keep strings short: displayError renders a single stripe.)
+            String why = "Wifi Offline"; // timeout: AP/DHCP not answering
+            switch (WiFi.status()) {
+                case WL_CONNECT_FAILED: why = "Wrong password?"; break;
+                case WL_NO_SSID_AVAIL:  why = "SSID not found"; break;
+                case WL_CONNECTION_LOST:
+                case WL_DISCONNECTED:   why = "Signal lost"; break;
+                default:                break;
+            }
+            Serial.printf("[wifi] connect '%s' failed, status=%d\n", ssid.c_str(), (int)WiFi.status());
+            displayError(why);
             vTaskDelay(500 / portTICK_RATE_MS);
             break;
         }
